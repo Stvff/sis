@@ -1,5 +1,7 @@
 # Stvff's Image Splicer
-See [my project page](https://handmade.network/p/434/stvff-s-image-splicer/) for updates.\
+![SIS logo, consists of three boxes with the letters in them](/sis_logo.png "SIS logo, consists of three boxes with the letters in them")\
+
+See [my HMN project page](https://handmade.network/p/434/stvff-s-image-splicer/) for updates.\
 Often, I want to crop an image to a very specific size in a specific way, or add an image to an image,
 or do something to an image that I consider trivial, but that most basic image editors don't provide in the way I would really like it to be.\
 MS Paint did a lot of things really well in my opinion, but it sometimes misses out on those few extra things, Krita is a nice fully-featured editor,

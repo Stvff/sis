@@ -12,7 +12,7 @@ WINDOW_TITLE :: "Stvff's Image Splicer (currently in UI dev stage)"
 
 GL_MAJOR_VERSION :: 3
 GL_MINOR_VERSION :: 3
-UI_SCALE :: 4
+UI_SCALE :: 10
 MINIMUM_SIZE :: [2]i32{200, 100}
 UI_MINIMUM_SIZE :: [2]i32{MINIMUM_SIZE.x/UI_SCALE, MINIMUM_SIZE.y/UI_SCALE}
 
@@ -133,13 +133,11 @@ main :: proc() {
 	{
 		gl.GenTextures(1, &gui_tex_o)
 		gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(guil.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &guil.tex[0])
 
 		gl.GenTextures(1, &img_tex_o)
 		gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
 	}
@@ -177,9 +175,12 @@ main :: proc() {
 
 				slice.fill(guil.tex, 0)
 //				slice.fill(imgl.tex, 0)
-//				guil.tex[guil.size.x/2 + (guil.size.y/2)*guil.size.x] = 255
+				y: i32 = 0
 				for &pix, i in imgl.tex {
-					pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
+//					pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
+//					pix = [4]byte{255 - byte((255*y)/imgl.size.x), 0, 255 - byte((255*i) / len(imgl.tex)), 255}
+//					y = (y + 1)%imgl.size.x
+					pix = {0, 0, 63, 255}
 				}
 				fmt.println("---------------------- new frame -----------------")
 			}
@@ -187,24 +188,23 @@ main :: proc() {
 
 		slice.fill(guil.tex, 0)
 
-		cursor_pos_float: [2]f64
-		cursor_pos_float.x, cursor_pos_float.y = glfw.GetCursorPos(window_handle)
 		cursor_pos: [2]i32
-		cursor_pos.x = clamp(i32(cursor_pos_float.x)/UI_SCALE, 0, guil.size.x-1)
-		cursor_pos.y = clamp((window_size.y - i32(cursor_pos_float.y))/UI_SCALE, 0, guil.size.y-1)
-		//guil.tex[(int(cursor_pos.x)) + (int(cursor_pos.y))*int(guil.size.x)] = 255
-		draw_ui_box(guil, cursor_pos, [2]i32{40, 30})
-//		draw_char(guil, cursor_pos, 'S')
-//		draw_char(guil, cursor_pos + {4, 0}, '1')
-		{x, y: i32
-		for c in 0..<len(font5x3) {
-			draw_char(guil, {x, y}, rune(c))
-			x += 4
-			if x > guil.size.x {
-				x = 0
-				y += 6
-			}
-		}}
+		{
+			cursor_pos_float: [2]f64
+			cursor_pos_float.x, cursor_pos_float.y = glfw.GetCursorPos(window_handle)
+			cursor_pos.x = clamp(i32(cursor_pos_float.x)/UI_SCALE, 0, guil.size.x-1)
+			cursor_pos.y = clamp((window_size.y - i32(cursor_pos_float.y))/UI_SCALE, 0, guil.size.y-1)
+		}
+
+
+		draw_ui_box(guil, {20, 20}, {8, 8})
+		draw_char(guil, {23, 21}, 'S')
+
+		draw_ui_box(guil, {27, 16}, {8, 8})
+		draw_char(guil, {30, 17}, 'I')
+
+		draw_ui_box(guil, {21, 10}, {8, 8})
+		draw_char(guil, {24, 11}, 'S')
 
 
 
