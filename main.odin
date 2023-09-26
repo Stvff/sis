@@ -4,13 +4,17 @@ import "core:fmt"
 import "vendor:glfw"
 import gl "vendor:OpenGL"
 import "core:math"
+import "core:slice"
 
-INIT_WIDTH   :: 1600
-INIT_HEIGHT  :: 900
-WINDOW_TITLE :: "Take a look at this"
+INIT_WIDTH   :: 1280
+INIT_HEIGHT  :: 800
+WINDOW_TITLE :: "Stvff's Image Splicer (currently in UI dev stage)"
 
 GL_MAJOR_VERSION :: 3
 GL_MINOR_VERSION :: 3
+UI_SCALE :: 4
+MINIMUM_SIZE :: [2]i32{200, 100}
+UI_MINIMUM_SIZE :: [2]i32{MINIMUM_SIZE.x/UI_SCALE, MINIMUM_SIZE.y/UI_SCALE}
 
 main :: proc() {
 	if !bool(glfw.Init()) {
@@ -18,20 +22,27 @@ main :: proc() {
 		return
 	} defer glfw.Terminate()
 
-	window_handle := glfw.CreateWindow(INIT_WIDTH, INIT_HEIGHT, WINDOW_TITLE, nil, nil)
-	defer glfw.DestroyWindow(window_handle)
-	if window_handle == nil {
-		fmt.eprintln("GLFW has failed to create a window")
-		return
-	}
-
+	window_size: [2]i32
+	window_handle: glfw.WindowHandle
 	{
+//		glfw.WindowHint(glfw.MAXIMIZED, 1)
+		glfw.WindowHint(glfw.RESIZABLE, 1)
+		window_handle = glfw.CreateWindow(INIT_WIDTH, INIT_HEIGHT, WINDOW_TITLE, nil, nil)
+		if window_handle == nil {
+			fmt.eprintln("GLFW has failed to create a window")
+			return
+		}
 		glfw.MakeContextCurrent(window_handle)
-		glfw.SetFramebufferSizeCallback(window_handle, window_size_changed)
-		gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
-	}
 
-	shader_program: u32; { /* compile and link shaders */
+		glfw.SetFramebufferSizeCallback(window_handle, window_size_changed)
+		glfw.SetWindowSizeLimits(window_handle, MINIMUM_SIZE.x, MINIMUM_SIZE.y, glfw.DONT_CARE, glfw.DONT_CARE)
+		window_size.x, window_size.y = glfw.GetFramebufferSize(window_handle)
+		gl.load_up_to(GL_MAJOR_VERSION, GL_MINOR_VERSION, glfw.gl_set_proc_address)
+	} defer glfw.DestroyWindow(window_handle)
+
+
+	shader_program: u32
+	{ /* compile and link shaders */
 		success: i32
 		log_backing: [512]u8
 		log := cast([^]u8) &log_backing
@@ -66,7 +77,8 @@ main :: proc() {
 		}
 	} defer gl.DeleteProgram(shader_program)
 
-	vertex_buffer_o, vertex_array_o, element_buffer_o: u32; { /* do some frankly insane triangle definition stuff */
+	vertex_buffer_o, vertex_array_o, element_buffer_o: u32
+	{ /* do some frankly insane triangle definition stuff */
 		vertices := [?]f32 {
 			/* triangle vertices */  /* texture coords */
 			-2.0, -1.0, 0.0,         -0.5, 0.0,  // bottom left
@@ -81,7 +93,7 @@ main :: proc() {
 		gl.GenBuffers(1, &vertex_buffer_o)     /* this has the actual data */
 		gl.GenBuffers(1, &element_buffer_o)    /* this is a decoupling layer for the actual data for re-using vertices */
 
-		gl.BindVertexArray(vertex_array_o)
+		gl.BindVertexArray(vertex_array_o) /* global state indicators */
 		gl.BindBuffer(gl.ARRAY_BUFFER, vertex_buffer_o)
 		gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, element_buffer_o)
 
@@ -100,35 +112,36 @@ main :: proc() {
 	}
 
 
-	gui_tex := make([][4]byte, 256*256)
-	defer delete(gui_tex)
-	img_tex := make([][4]byte, 1024*1024)
-	defer delete(img_tex)
-	x: u8 = 0
-	for &pix, i in gui_tex {
-		pix = [4]byte{byte((255*i) / len(gui_tex)), 0, x, 100}
-		x = (x + 1)
-	}
-	for &pix, i in img_tex {
-		pix = [4]byte{0, 255 - byte((255*i) / len(img_tex)), 0, 255}
+	guil, imgl: Program_layer
+	guil.size = window_size/UI_SCALE
+	imgl.size = window_size
+	fmt.println("sizes of texes", guil.size, imgl.size)
+
+	guil.data = make([dynamic][4]byte, area(guil.size))
+	imgl.data = make([dynamic][4]byte, area(imgl.size))
+	defer delete(guil.data)
+	defer delete(imgl.data)
+	guil.tex = guil.data[:]
+	imgl.tex = imgl.data[:]
+
+	guil.tex[len(guil.tex)/2 + int(guil.size.x)/2] = 255
+	for &pix, i in imgl.tex {
+		pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
 	}
 
-	gui_tex_o, img_tex_o: u32; {
+	gui_tex_o, img_tex_o: u32
+	{
 		gl.GenTextures(1, &gui_tex_o)
 		gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, &gui_tex[0])
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(guil.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &guil.tex[0])
 
 		gl.GenTextures(1, &img_tex_o)
 		gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, &img_tex[0])
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
 	}
 
 	gl.UseProgram(shader_program)
@@ -138,35 +151,109 @@ main :: proc() {
 
 	t: u128 = 0
 	lim :: 100
-	for !glfw.WindowShouldClose(window_handle) {
-		// Process all incoming events like keyboard press, window resize, and etc.
-		glfw.PollEvents()
+	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
+		if glfw.GetKey(window_handle, glfw.KEY_ESCAPE) == glfw.PRESS do break
 
-//		gl.ClearColor(0.5, 0.0, 0.5 + math.sin(f32(t)/f32(lim))/2.0, 1.0)
+		{ /* if window size changes */
+			new_window_size: [2]i32
+			new_window_size.x, new_window_size.y = glfw.GetFramebufferSize(window_handle)
+			if new_window_size != window_size {
+				window_size = new_window_size
+				fmt.println("thing changed:", window_size)
+				guil.size = vecmax(window_size/UI_SCALE, UI_MINIMUM_SIZE)
+				imgl.size = vecmax(window_size, MINIMUM_SIZE)
+				fmt.println("gui size", guil.size)
+
+				if area(guil.size) > len(guil.data) || area(imgl.size) > len(imgl.data) {
+					fmt.println("realloced")
+					resize(&guil.data, area(guil.size))
+					resize(&imgl.data, area(imgl.size))
+					guil.tex = guil.data[:]
+					imgl.tex = imgl.data[:]
+				} else {
+					guil.tex = guil.data[0:area(guil.size)]
+					imgl.tex = imgl.data[0:area(imgl.size)]
+				}
+
+				slice.fill(guil.tex, 0)
+//				slice.fill(imgl.tex, 0)
+//				guil.tex[guil.size.x/2 + (guil.size.y/2)*guil.size.x] = 255
+				for &pix, i in imgl.tex {
+					pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
+				}
+				fmt.println("---------------------- new frame -----------------")
+			}
+		}
+
+		slice.fill(guil.tex, 0)
+
+		cursor_pos_float: [2]f64
+		cursor_pos_float.x, cursor_pos_float.y = glfw.GetCursorPos(window_handle)
+		cursor_pos: [2]i32
+		cursor_pos.x = clamp(i32(cursor_pos_float.x)/UI_SCALE, 0, guil.size.x-1)
+		cursor_pos.y = clamp((window_size.y - i32(cursor_pos_float.y))/UI_SCALE, 0, guil.size.y-1)
+		//guil.tex[(int(cursor_pos.x)) + (int(cursor_pos.y))*int(guil.size.x)] = 255
+		draw_ui_box(guil, cursor_pos, [2]i32{40, 30})
+//		draw_char(guil, cursor_pos, 'S')
+//		draw_char(guil, cursor_pos + {4, 0}, '1')
+		{x, y: i32
+		for c in 0..<len(font5x3) {
+			draw_char(guil, {x, y}, rune(c))
+			x += 4
+			if x > guil.size.x {
+				x = 0
+				y += 6
+			}
+		}}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		/* render to screen with openGL */
 		gl.ClearColor(0.5, 0.5, 0.5, 1.0)
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 
-		gui_tex[800] = [4]byte{255, byte(255*math.sin(f32(t)/f32(lim))), 255, 255}
 		gl.ActiveTexture(gl.TEXTURE0)
 		gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, &gui_tex[0])
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(guil.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &guil.tex[0])
 		gl.ActiveTexture(gl.TEXTURE1)
 		gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 1024, 0, gl.RGBA, gl.UNSIGNED_BYTE, &img_tex[0])
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
 
 		gl.UseProgram(shader_program)
 		gl.BindVertexArray(vertex_array_o)
 		gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
 
 		t += 1
-
 	glfw.SwapBuffers(window_handle) }
 }
 
+area :: proc(v: [2]i32) -> int {
+	return int(v.x)*int(v.y)
+}
 
-import "core:runtime"
+vecmax :: proc(v: [2]i32, n: [2]i32) -> [2]i32 {
+	return [2]i32{max(v.x, n.x), max(v.y, n.y)}
+}
+
 window_size_changed :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
-	context = runtime.default_context()
-	fmt.println("thing changed:", width, height, window)
 	gl.Viewport(0, 0, width, height)
 }
