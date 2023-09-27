@@ -12,7 +12,7 @@ WINDOW_TITLE :: "Stvff's Image Splicer (currently in UI dev stage)"
 
 GL_MAJOR_VERSION :: 3
 GL_MINOR_VERSION :: 3
-UI_SCALE :: 10
+UI_SCALE :: 4
 MINIMUM_SIZE :: [2]i32{200, 100}
 UI_MINIMUM_SIZE :: [2]i32{MINIMUM_SIZE.x/UI_SCALE, MINIMUM_SIZE.y/UI_SCALE}
 
@@ -124,10 +124,7 @@ main :: proc() {
 	guil.tex = guil.data[:]
 	imgl.tex = imgl.data[:]
 
-	guil.tex[len(guil.tex)/2 + int(guil.size.x)/2] = 255
-	for &pix, i in imgl.tex {
-		pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
-	}
+	draw_preddy_gradient(imgl)
 
 	gui_tex_o, img_tex_o: u32
 	{
@@ -175,13 +172,7 @@ main :: proc() {
 
 				slice.fill(guil.tex, 0)
 //				slice.fill(imgl.tex, 0)
-				y: i32 = 0
-				for &pix, i in imgl.tex {
-//					pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
-//					pix = [4]byte{255 - byte((255*y)/imgl.size.x), 0, 255 - byte((255*i) / len(imgl.tex)), 255}
-//					y = (y + 1)%imgl.size.x
-					pix = {0, 0, 63, 255}
-				}
+				draw_preddy_gradient(imgl)
 				fmt.println("---------------------- new frame -----------------")
 			}
 		}
@@ -196,15 +187,18 @@ main :: proc() {
 			cursor_pos.y = clamp((window_size.y - i32(cursor_pos_float.y))/UI_SCALE, 0, guil.size.y-1)
 		}
 
+		draw_text_in_box(guil, cursor_pos, "Hello World!")
+		draw_text_in_box(guil, cursor_pos + {0, 9}, "The quick brown fox jumped over the lazy dog")
+		draw_text_in_box(guil, cursor_pos + {0, 18}, "I'm just offsetting every box, and clamping the position")
 
-		draw_ui_box(guil, {20, 20}, {8, 8})
-		draw_char(guil, {23, 21}, 'S')
+//		draw_ui_box(guil, {20, 20}, {8, 8})
+//		draw_char(guil, {23, 21}, 'S')
 
-		draw_ui_box(guil, {27, 16}, {8, 8})
-		draw_char(guil, {30, 17}, 'I')
+//		draw_ui_box(guil, {27, 16}, {8, 8})
+//		draw_char(guil, {30, 17}, 'I')
 
-		draw_ui_box(guil, {21, 10}, {8, 8})
-		draw_char(guil, {24, 11}, 'S')
+//		draw_ui_box(guil, {21, 10}, {8, 8})
+//		draw_char(guil, {24, 11}, 'S')
 
 
 

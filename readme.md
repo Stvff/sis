@@ -1,15 +1,15 @@
 # Stvff's Image Splicer
-![SIS logo, consists of three boxes with the letters in them](/sis_logo.png "SIS logo, consists of three boxes with the letters in them")\
+![SIS logo, consists of three boxes with the letters in them](/sis_logo.png "SIS logo, consists of three boxes with the letters in them")
 
 See [my HMN project page](https://handmade.network/p/434/stvff-s-image-splicer/) for updates.\
 Often, I want to crop an image to a very specific size in a specific way, or add an image to an image,
 or do something to an image that I consider trivial, but that most basic image editors don't provide in the way I would really like it to be.\
 MS Paint did a lot of things really well in my opinion, but it sometimes misses out on those few extra things, Krita is a nice fully-featured editor,
-but somewhat slow, and had a lot of options directly in your face, that aren't all very clear.
+but somewhat slow, and has a lot of options directly in your face, that aren't all very clear.
 
 Why complain about vaguely defined things, when you have the power to try to make exactly the thing you want? In this case, I've never made a proper app/program with full graphical
 user interface, so maybe all these other developers are running into some fundamental UX/UI problem, that I just haven't realized.\
-So, for this year's (2023) [Wheel Reinvention Jam](https://handmade.network/jam/2023), I am making this image splicer/editor utility program.\
+So, for this year's (2023) [Wheel Reinvention Jam](https://handmade.network/jam/2023), I am making this image splicer/editor utility program.
 
 My preliminary intended features and goals are the following:
 - images on top of images on top of an optional background

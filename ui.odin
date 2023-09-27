@@ -8,19 +8,31 @@ Program_layer :: struct {
 	data: [dynamic][4]byte
 }
 
-ui_element :: struct {
-	pos: [2]i32,
-	size: [2]i32
-}
+UI_BORDER_COLOR :: [4]byte{100, 70, 100, 255}
+UI_BODY_COLOR :: [4]byte{180, 150, 180, 255}
+UI_TEXT_COLOR :: [4]byte{0, 0, 30, 255}
+
+
 /*
 UI_BORDER_COLOR :: [4]byte{255, 1, 120, 255}
 UI_BODY_COLOR :: [4]byte{254, 0, 234, 255}
 UI_TEXT_COLOR :: [4]byte{144, 1, 245, 255}
-*/
 
 UI_BORDER_COLOR :: [4]byte{195, 1, 70, 255}
 UI_BODY_COLOR :: [4]byte{194, 0, 184, 255}
 UI_TEXT_COLOR :: [4]byte{104, 1, 205, 255}
+*/
+
+draw_text_in_box :: proc(ui: Program_layer, box_pos: [2]i32, str: string){
+	box_pos := box_pos
+	box_size := [2]i32{i32(len(str))*4 + 4, 8}
+	box_pos = draw_ui_box(ui, box_pos, box_size)
+	box_pos += {3, 1}
+	for c in str {
+		draw_char(ui, box_pos, c)
+		box_pos.x += 4
+	}
+}
 
 
 // font from fenster
@@ -41,7 +53,7 @@ draw_char :: proc(ui: Program_layer, chr_pos: [2]i32, char: rune) {
 
 // FIXME: goes out of bounds when box is too big and texture is too small?
 // It has to do with the window becoming too small and the mouse coordinates getting real confused
-draw_ui_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32){
+draw_ui_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32) -> [2]i32 {
 	box_pos, box_size := box_pos, box_size
 	assert(box_size.x > 0 && box_size.y > 0)
 	box_size.x = clamp(box_size.x, 0, ui.size.x - 1)
@@ -62,5 +74,16 @@ draw_ui_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32){
 	}
 	upper_row := box_pos.x + (box_pos.y + box_size.y)*ui.size.x
 	for i in upper_row..=upper_row + box_size.x do ui.tex[i] = UI_BORDER_COLOR
+	return box_pos
+}
+
+draw_preddy_gradient :: proc(layer: Program_layer){
+	y: i32 = 0
+	for &pix, i in layer.tex {
+		pix = [4]byte{255 - byte((210*y)/layer.size.x), 0, 255 - byte((210*i) / len(layer.tex)), 255}
+		y = (y + 1)%layer.size.x
+//		pix = [4]byte{0, 0, 255 - byte((255*i) / len(imgl.tex)), 255}
+//		pix = {0, 0, 63, 255}
+	}
 }
 
