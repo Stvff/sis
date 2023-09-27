@@ -8,7 +8,7 @@ import "core:slice"
 
 INIT_WIDTH   :: 1280
 INIT_HEIGHT  :: 800
-WINDOW_TITLE :: "Stvff's Image Splicer (currently in UI dev stage)"
+WINDOW_TITLE :: "Stvff's Image Splicer (getting somewhere)"
 
 GL_MAJOR_VERSION :: 3
 GL_MINOR_VERSION :: 3
@@ -113,18 +113,19 @@ main :: proc() {
 
 
 	guil, imgl: Program_layer
-	guil.size = window_size/UI_SCALE
-	imgl.size = window_size
-	fmt.println("sizes of texes", guil.size, imgl.size)
-
-	guil.data = make([dynamic][4]byte, area(guil.size))
-	imgl.data = make([dynamic][4]byte, area(imgl.size))
-	defer delete(guil.data)
-	defer delete(imgl.data)
-	guil.tex = guil.data[:]
-	imgl.tex = imgl.data[:]
-
-	draw_preddy_gradient(imgl)
+	{
+		guil.size = window_size/UI_SCALE
+		imgl.size = window_size
+//		fmt.println("sizes of texes", guil.size, imgl.size)
+		guil.data = make([dynamic][4]byte, area(guil.size))
+		imgl.data = make([dynamic][4]byte, area(imgl.size))
+		guil.tex = guil.data[:]
+		imgl.tex = imgl.data[:]
+		draw_preddy_gradient(imgl)
+	} defer {
+		delete(guil.data)
+		delete(imgl.data)
+	}
 
 	gui_tex_o, img_tex_o: u32
 	{
@@ -144,11 +145,34 @@ main :: proc() {
 	gl.Uniform1i(gl.GetUniformLocation(shader_program, "img_texture"), 1)
 
 
+	imgs := make([]Image, 4)
+	defer {
+		for img in imgs do delete(img.data)
+		delete(imgs)
+	}
+
+	imgs[0] = {"gray rect", {300, 300}, {0, 0}, nil}
+	imgs[0].data = make([dynamic][4]byte, area(imgs[0].size))
+	slice.fill(imgs[0].data[:], UI_BORDER_COLOR)
+
+	imgs[1] = {"grey rect", {200, 400}, {20, 20}, nil}
+	imgs[1].data = make([dynamic][4]byte, area(imgs[1].size))
+	slice.fill(imgs[1].data[:], UI_BODY_COLOR)
+
+	imgs[2] = {"black rect", {400, 100}, {100, 100}, nil}
+	imgs[2].data = make([dynamic][4]byte, area(imgs[2].size))
+	slice.fill(imgs[2].data[:], UI_TEXT_COLOR)
+
+	imgs[3] = {"red rect", {45, 30}, {0, 107}, nil}
+	imgs[3].data = make([dynamic][4]byte, area(imgs[3].size))
+	slice.fill(imgs[3].data[:], [4]byte{255, 0, 0, 255})
+
+	mouse: Mouse
+
 	t: u128 = 0
 	lim :: 100
 	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
 		if glfw.GetKey(window_handle, glfw.KEY_ESCAPE) == glfw.PRESS do break
-
 		{ /* if window size changes */
 			new_window_size: [2]i32
 			new_window_size.x, new_window_size.y = glfw.GetFramebufferSize(window_handle)
@@ -176,20 +200,55 @@ main :: proc() {
 				fmt.println("---------------------- new frame -----------------")
 			}
 		}
-
-		slice.fill(guil.tex, 0)
-
-		cursor_pos: [2]i32
+		/* inputs */
 		{
-			cursor_pos_float: [2]f64
-			cursor_pos_float.x, cursor_pos_float.y = glfw.GetCursorPos(window_handle)
-			cursor_pos.x = clamp(i32(cursor_pos_float.x)/UI_SCALE, 0, guil.size.x-1)
-			cursor_pos.y = clamp((window_size.y - i32(cursor_pos_float.y))/UI_SCALE, 0, guil.size.y-1)
+			mouse.left  = glfw.GetMouseButton(window_handle, glfw.MOUSE_BUTTON_LEFT) == 1
+			mouse.right = glfw.GetMouseButton(window_handle, glfw.MOUSE_BUTTON_RIGHT) == 1
+			mouse.fpos.x, mouse.fpos.y = glfw.GetCursorPos(window_handle)
+			mouse.pos.x = clamp(i32(mouse.fpos.x)/UI_SCALE, 0, guil.size.x-1)
+			mouse.pos.y = clamp((window_size.y - i32(mouse.fpos.y))/UI_SCALE, 0, guil.size.y-1)
+		} defer { mouse.left_was = mouse.left; mouse.right_was = mouse.right }
+
+		/* drawing */
+		slice.fill(guil.tex, 0)
+//		draw_text_in_box(guil, mouse.pos, "Hello World!")
+//		draw_text_in_box(guil, mouse.pos + {0, 9}, "The quick brown fox jumped over the lazy dog")
+//		draw_text_in_box(guil, mouse.pos + {0, 18}, "I'm just offsetting every box, and clamping the position")
+//		draw_ui_box(guil, cursor_pos + {-5, 0}, {50, 50})
+
+		{/* draw_images_bins and manage */
+			bheight :: 18
+			swap := -1
+			y: i32 = guil.size.y - bheight - 5
+			#reverse for img, i in imgs {
+				box_size := [2]i32{i32(len(img.name))*4 + 9, bheight}
+				txt_pos := draw_ui_box(guil, {5, y}, box_size)
+				draw_text(guil, txt_pos + {8, 9}, img.name)
+
+				if i < len(imgs) - 1 {
+				if is_in_rect(mouse.pos, txt_pos + {2, bheight - 7}, SMALL_ARROW_SIZE) {
+					draw_small_arrow(guil, txt_pos + {2, bheight - 7}, .up, {230, 50, 50, 255})
+					if mouse.left && !mouse.left_was do swap = i + 1
+				} else do draw_small_arrow(guil, txt_pos + {2, bheight - 7}, .up, UI_BORDER_COLOR)}
+
+				if i > 0 {
+				if is_in_rect(mouse.pos, txt_pos + {2, 2}, SMALL_ARROW_SIZE) {
+					draw_small_arrow(guil, txt_pos + {2, 2}, .down, {230, 50, 50, 255})
+					if mouse.left && !mouse.left_was do swap = i
+				} else do draw_small_arrow(guil, txt_pos + {2, 2}, .down, UI_BORDER_COLOR)}
+
+				y -= bheight + 1
+			}
+
+			if swap > 0 {
+				temp := imgs[swap]
+				imgs[swap] = imgs[swap - 1]
+				imgs[swap - 1] = temp
+				draw_preddy_gradient(imgl)
+			}
 		}
 
-		draw_text_in_box(guil, cursor_pos, "Hello World!")
-		draw_text_in_box(guil, cursor_pos + {0, 9}, "The quick brown fox jumped over the lazy dog")
-		draw_text_in_box(guil, cursor_pos + {0, 18}, "I'm just offsetting every box, and clamping the position")
+		draw_images(imgl, imgs)
 
 //		draw_ui_box(guil, {20, 20}, {8, 8})
 //		draw_char(guil, {23, 21}, 'S')
