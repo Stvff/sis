@@ -24,7 +24,7 @@ main :: proc() {
 
 	window_size: [2]i32
 	window_handle: glfw.WindowHandle
-	{
+	{/* setup and open window */
 //		glfw.WindowHint(glfw.MAXIMIZED, 1)
 		glfw.WindowHint(glfw.RESIZABLE, 1)
 		window_handle = glfw.CreateWindow(INIT_WIDTH, INIT_HEIGHT, WINDOW_TITLE, nil, nil)
@@ -113,7 +113,7 @@ main :: proc() {
 
 
 	guil, imgl: Program_layer
-	{
+	{/* initialize main program layers */
 		guil.size = window_size/UI_SCALE
 		imgl.size = window_size
 //		fmt.println("sizes of texes", guil.size, imgl.size)
@@ -128,7 +128,7 @@ main :: proc() {
 	}
 
 	gui_tex_o, img_tex_o: u32
-	{
+	{/* show the main program layers to the gpu */
 		gl.GenTextures(1, &gui_tex_o)
 		gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -138,39 +138,26 @@ main :: proc() {
 		gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
+
+		gl.UseProgram(shader_program)
+		gl.Uniform1i(gl.GetUniformLocation(shader_program, "gui_texture"), 0)
+		gl.Uniform1i(gl.GetUniformLocation(shader_program, "img_texture"), 1)
 	}
 
-	gl.UseProgram(shader_program)
-	gl.Uniform1i(gl.GetUniformLocation(shader_program, "gui_texture"), 0)
-	gl.Uniform1i(gl.GetUniformLocation(shader_program, "img_texture"), 1)
-
-
-	imgs := make([]Image, 4)
+	imgs := make([]Image, 2)
 	defer {
 		for img in imgs do delete(img.data)
 		delete(imgs)
 	}
-
-	imgs[0] = {"gray rect", {300, 300}, {0, 0}, nil}
-	imgs[0].data = make([dynamic][4]byte, area(imgs[0].size))
-	slice.fill(imgs[0].data[:], UI_BORDER_COLOR)
-
-	imgs[1] = {"grey rect", {200, 400}, {20, 20}, nil}
-	imgs[1].data = make([dynamic][4]byte, area(imgs[1].size))
-	slice.fill(imgs[1].data[:], UI_BODY_COLOR)
-
-	imgs[2] = {"black rect", {400, 100}, {100, 100}, nil}
-	imgs[2].data = make([dynamic][4]byte, area(imgs[2].size))
-	slice.fill(imgs[2].data[:], UI_TEXT_COLOR)
-
-	imgs[3] = {"red rect", {45, 30}, {0, 107}, nil}
-	imgs[3].data = make([dynamic][4]byte, area(imgs[3].size))
-	slice.fill(imgs[3].data[:], [4]byte{255, 0, 0, 255})
+	{
+		imgs[0] = load_qoi("s/frame00100.qoi")
+		imgs[1] = load_qoi("s/frame00100_sprite.qoi")
+		imgs[1].pos = {40, 40}
+	}
 
 	mouse: Mouse
 
 	t: u128 = 0
-	lim :: 100
 	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
 		if glfw.GetKey(window_handle, glfw.KEY_ESCAPE) == glfw.PRESS do break
 		{ /* if window size changes */
@@ -178,13 +165,13 @@ main :: proc() {
 			new_window_size.x, new_window_size.y = glfw.GetFramebufferSize(window_handle)
 			if new_window_size != window_size {
 				window_size = new_window_size
-				fmt.println("thing changed:", window_size)
-				guil.size = vecmax(window_size/UI_SCALE, UI_MINIMUM_SIZE)
-				imgl.size = vecmax(window_size, MINIMUM_SIZE)
-				fmt.println("gui size", guil.size)
+//				fmt.println("thing changed:", window_size)
+				guil.size = vec_max(window_size/UI_SCALE, UI_MINIMUM_SIZE)
+				imgl.size = vec_max(window_size, MINIMUM_SIZE)
+//				fmt.println("gui size", guil.size)
 
 				if area(guil.size) > len(guil.data) || area(imgl.size) > len(imgl.data) {
-					fmt.println("realloced")
+//					fmt.println("realloced")
 					resize(&guil.data, area(guil.size))
 					resize(&imgl.data, area(imgl.size))
 					guil.tex = guil.data[:]
@@ -197,17 +184,20 @@ main :: proc() {
 				slice.fill(guil.tex, 0)
 //				slice.fill(imgl.tex, 0)
 				draw_preddy_gradient(imgl)
-				fmt.println("---------------------- new frame -----------------")
+//				fmt.println("---------------------- new frame -----------------")
 			}
 		}
 		/* inputs */
-		{
+		{/* mouse state */
 			mouse.left  = glfw.GetMouseButton(window_handle, glfw.MOUSE_BUTTON_LEFT) == 1
 			mouse.right = glfw.GetMouseButton(window_handle, glfw.MOUSE_BUTTON_RIGHT) == 1
 			mouse.fpos.x, mouse.fpos.y = glfw.GetCursorPos(window_handle)
-			mouse.pos.x = clamp(i32(mouse.fpos.x)/UI_SCALE, 0, guil.size.x-1)
-			mouse.pos.y = clamp((window_size.y - i32(mouse.fpos.y))/UI_SCALE, 0, guil.size.y-1)
-		} defer { mouse.left_was = mouse.left; mouse.right_was = mouse.right }
+			mouse.pos = vec_clamp({i32(mouse.fpos.x), window_size.y - i32(mouse.fpos.y)}/UI_SCALE, {0, 0}, guil.size - 1)
+		} defer {
+			mouse.left_was = mouse.left
+			mouse.right_was = mouse.right
+			mouse.is_on = .nothing
+		}
 
 		/* drawing */
 		slice.fill(guil.tex, 0)
@@ -216,28 +206,30 @@ main :: proc() {
 //		draw_text_in_box(guil, mouse.pos + {0, 18}, "I'm just offsetting every box, and clamping the position")
 //		draw_ui_box(guil, cursor_pos + {-5, 0}, {50, 50})
 
-		{/* draw_images_bins and manage */
-			bheight :: 18
+		{/* draw_images_bins and manage layers */
+			bin_height :: 18
+			arrow_clr := UI_BORDER_COLOR
+			activated_arrow_clr := [4]byte{230, 50, 50, 255}
 			swap := -1
-			y: i32 = guil.size.y - bheight - 5
+			y: i32 = guil.size.y/2 + (i32(len(imgs))*(bin_height + 1))/2
 			#reverse for img, i in imgs {
-				box_size := [2]i32{i32(len(img.name))*4 + 9, bheight}
-				txt_pos := draw_ui_box(guil, {5, y}, box_size)
-				draw_text(guil, txt_pos + {8, 9}, img.name)
+				box_size := [2]i32{i32(len(img.name))*4 + SMALL_ARROW_SIZE.x + 4, bin_height}
+				actual_pos := draw_ui_box(guil, {5, y}, box_size)
+				draw_text(guil, actual_pos + {SMALL_ARROW_SIZE.x + 3, 9}, img.name)
 
 				if i < len(imgs) - 1 {
-				if is_in_rect(mouse.pos, txt_pos + {2, bheight - 7}, SMALL_ARROW_SIZE) {
-					draw_small_arrow(guil, txt_pos + {2, bheight - 7}, .up, {230, 50, 50, 255})
-					if mouse.left && !mouse.left_was do swap = i + 1
-				} else do draw_small_arrow(guil, txt_pos + {2, bheight - 7}, .up, UI_BORDER_COLOR)}
+				if is_in_rect(mouse.pos, actual_pos + {2, bin_height - 7}, SMALL_ARROW_SIZE) {
+					draw_small_arrow(guil, actual_pos + {2, bin_height - 7}, .up, activated_arrow_clr)
+					if !mouse.left && mouse.left_was do swap = i + 1
+				} else do draw_small_arrow(guil, actual_pos + {2, bin_height - 7}, .up, arrow_clr)}
 
 				if i > 0 {
-				if is_in_rect(mouse.pos, txt_pos + {2, 2}, SMALL_ARROW_SIZE) {
-					draw_small_arrow(guil, txt_pos + {2, 2}, .down, {230, 50, 50, 255})
-					if mouse.left && !mouse.left_was do swap = i
-				} else do draw_small_arrow(guil, txt_pos + {2, 2}, .down, UI_BORDER_COLOR)}
+				if is_in_rect(mouse.pos, actual_pos + {2, 2}, SMALL_ARROW_SIZE) {
+					draw_small_arrow(guil, actual_pos + {2, 2}, .down, activated_arrow_clr)
+					if !mouse.left && mouse.left_was do swap = i
+				} else do draw_small_arrow(guil, actual_pos + {2, 2}, .down, arrow_clr)}
 
-				y -= bheight + 1
+				y -= bin_height + 1
 			}
 
 			if swap > 0 {
@@ -245,39 +237,48 @@ main :: proc() {
 				imgs[swap] = imgs[swap - 1]
 				imgs[swap - 1] = temp
 				draw_preddy_gradient(imgl)
+				mouse.is_on = .image_bin_up_down_button
 			}
 		}
 
+		{
+			dial_pos := draw_ui_box(guil, guil.size/2, {49, 49})
+			dial_middle := dial_pos + {24, 24}
+			r := mouse.pos - dial_middle
+			sproing: int
+			for i in 0..<10 {
+				on_circle := [2]i32{
+					i32(20*math.sin(math.TAU*f64(i)/10)),
+					i32(20*math.cos(math.TAU*f64(i)/10))
+				}
+				theta := math.mod(1.8 - (math.PI + math.atan2(f64(r.y), f64(r.x)))/math.TAU, 1)
+				fmt.println(theta, f64(i)/10)
+
+				char_clr := UI_TEXT_COLOR
+				if f64(i)/10 < theta && f64(i + 1)/10 >= theta {
+					char_clr = RED
+					sproing = i
+				}
+				draw_char(guil, dial_middle + on_circle - {1, 3}, rune('0' + i), char_clr)
+//				draw_line(guil, dial_middle, on_circle.yx, PASTEL_BLUE)
+			}
+			line_len :: 16
+			if magsq(r) < line_len*line_len do r = line_len*r
+			if r == 0 do r = {0, 1}
+			sv := [2]i32{
+				i32(line_len*math.sin(math.TAU*f64(sproing)/10)),
+				i32(line_len*math.cos(math.TAU*f64(sproing)/10))
+			}
+			draw_line(guil, dial_middle, sv, UI_TEXT_COLOR)
+			draw_line(guil, dial_middle, line_len*r/mag(r), UI_TEXT_COLOR)
+		}
+
+
+
+
+
+
 		draw_images(imgl, imgs)
-
-//		draw_ui_box(guil, {20, 20}, {8, 8})
-//		draw_char(guil, {23, 21}, 'S')
-
-//		draw_ui_box(guil, {27, 16}, {8, 8})
-//		draw_char(guil, {30, 17}, 'I')
-
-//		draw_ui_box(guil, {21, 10}, {8, 8})
-//		draw_char(guil, {24, 11}, 'S')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 		/* render to screen with openGL */
@@ -303,8 +304,34 @@ area :: proc(v: [2]i32) -> int {
 	return int(v.x)*int(v.y)
 }
 
-vecmax :: proc(v: [2]i32, n: [2]i32) -> [2]i32 {
-	return [2]i32{max(v.x, n.x), max(v.y, n.y)}
+vec_max :: proc(v: [2]i32, m: [2]i32) -> [2]i32 {
+	return [2]i32{max(v.x, m.x), max(v.y, m.y)}
+}
+
+vec_clamp :: proc(v: [2]i32, l, h: [2]i32) -> [2]i32 {
+	return {
+		clamp(v.x, l.x, h.x),
+		clamp(v.y, l.y, h.y)
+	}
+}
+
+mag :: proc(v: [2]i32) -> i32 {
+	return cast(i32) math.sqrt(f64(v.x*v.x + v.y*v.y))
+}
+magsq :: proc(v: [2]i32) -> i32 {
+	return v.x*v.x + v.y*v.y
+}
+
+// TODO: place these in all the places where it should be
+is_in_space :: proc(point_pos, size: [2]i32) -> bool {
+	if 0 > point_pos.x || point_pos.x >= size.x do return false
+	if 0 > point_pos.y || point_pos.y >= size.y do return false
+	return true
+}
+is_in_rect :: proc(point_pos, rect_pos, rect_size: [2]i32) -> bool {
+	if rect_pos.x > point_pos.x || point_pos.x >= rect_pos.x + rect_size.x do return false
+	if rect_pos.y > point_pos.y || point_pos.y >= rect_pos.y + rect_size.y do return false
+	return true
 }
 
 window_size_changed :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
