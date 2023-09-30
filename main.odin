@@ -144,7 +144,7 @@ main :: proc() {
 		gl.Uniform1i(gl.GetUniformLocation(shader_program, "img_texture"), 1)
 	}
 
-	imgs := make([]Image, 2)
+	imgs := make([]Image, 3)
 	defer {
 		for img in imgs do delete(img.data)
 		delete(imgs)
@@ -153,9 +153,12 @@ main :: proc() {
 		imgs[0] = load_qoi("s/frame00100.qoi")
 		imgs[1] = load_qoi("s/frame00100_sprite.qoi")
 		imgs[1].pos = {40, 40}
+		imgs[2] = load_qoi("s/frame00100_sprite.qoi")
+		imgs[2].pos = {-60, -50}
 	}
 
 	mouse: Mouse
+	dial: Dial_box
 
 	t: u128 = 0
 	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
@@ -196,6 +199,7 @@ main :: proc() {
 		} defer {
 			mouse.left_was = mouse.left
 			mouse.right_was = mouse.right
+			mouse.was_on = mouse.is_on
 			mouse.is_on = .nothing
 		}
 
@@ -203,35 +207,47 @@ main :: proc() {
 		slice.fill(guil.tex, 0)
 //		draw_text_in_box(guil, mouse.pos, "Hello World!")
 //		draw_text_in_box(guil, mouse.pos + {0, 9}, "The quick brown fox jumped over the lazy dog")
-//		draw_text_in_box(guil, mouse.pos + {0, 18}, "I'm just offsetting every box, and clamping the position")
+//		draw_text_in_box(guil, mouse.pos + {0, 18}, "I'm just offsetting every box, and clamping the position", dyn = false)
 //		draw_ui_box(guil, cursor_pos + {-5, 0}, {50, 50})
 
+		if .dial_begin < mouse.was_on && mouse.was_on < .dial_end do mouse.is_on = mouse.was_on
+
 		{/* draw_images_bins and manage layers */
-			bin_height :: 18
+			bin_height :: TEXT_BOX_HEIGHT*2 + 4
 			arrow_clr := UI_BORDER_COLOR
-			activated_arrow_clr := [4]byte{230, 50, 50, 255}
+			activated_arrow_clr := UI_ACTIVATED_COLOR
+			clicked_arrow_clr := UI_PRESSED_COLOR
 			swap := -1
 			y: i32 = guil.size.y/2 + (i32(len(imgs))*(bin_height + 1))/2
 			#reverse for img, i in imgs {
-				box_size := [2]i32{i32(len(img.name))*4 + SMALL_ARROW_SIZE.x + 4, bin_height}
+				box_size := [2]i32{text_box_width(len(img.name)) + SMALL_ARROW_SIZE.x + 4, bin_height}
 				actual_pos := draw_ui_box(guil, {5, y}, box_size)
-				draw_text(guil, actual_pos + {SMALL_ARROW_SIZE.x + 3, 9}, img.name)
-
-				if i < len(imgs) - 1 {
-				if is_in_rect(mouse.pos, actual_pos + {2, bin_height - 7}, SMALL_ARROW_SIZE) {
-					draw_small_arrow(guil, actual_pos + {2, bin_height - 7}, .up, activated_arrow_clr)
-					if !mouse.left && mouse.left_was do swap = i + 1
-				} else do draw_small_arrow(guil, actual_pos + {2, bin_height - 7}, .up, arrow_clr)}
-
-				if i > 0 {
-				if is_in_rect(mouse.pos, actual_pos + {2, 2}, SMALL_ARROW_SIZE) {
-					draw_small_arrow(guil, actual_pos + {2, 2}, .down, activated_arrow_clr)
-					if !mouse.left && mouse.left_was do swap = i
-				} else do draw_small_arrow(guil, actual_pos + {2, 2}, .down, arrow_clr)}
-
+				draw_text(guil, actual_pos + {SMALL_ARROW_SIZE.x + 3, bin_height - 9}, img.name)
+				{/* up and down arrows */
+					up_arrow_pos := actual_pos + {2, bin_height - SMALL_ARROW_SIZE.x - 2}
+					down_arrow_pos := actual_pos + {2, 2}
+					up_arrow_clr, down_arrow_clr := arrow_clr, arrow_clr
+					if mouse.is_on == .nothing {
+						if is_in_rect(mouse.pos, up_arrow_pos, SMALL_ARROW_SIZE) {
+							up_arrow_clr = clicked_arrow_clr if mouse.left else activated_arrow_clr
+							if i < len(imgs) - 1 && !mouse.left && mouse.left_was do swap = i + 1
+						}
+						if is_in_rect(mouse.pos, down_arrow_pos, SMALL_ARROW_SIZE) {
+							down_arrow_clr = clicked_arrow_clr if mouse.left else activated_arrow_clr
+							if i > 0 && !mouse.left && mouse.left_was do swap = i
+						}
+					}
+					if i < len(imgs) - 1 do draw_small_arrow(guil, up_arrow_pos, .up, up_arrow_clr)
+					if i > 0 do draw_small_arrow(guil, down_arrow_pos, .down, down_arrow_clr)
+				}
+				{/* image position button */
+					if draw_text_box_button(guil, mouse, actual_pos + {SMALL_ARROW_SIZE.x + 4, 2}, "position", mouse.is_on == .nothing) == .press {
+						mouse.is_on = .dial_dial
+						dial = {title = "position", pos = mouse.pos, input_field = 0, input_cursor = 0}
+					}
+				}
 				y -= bin_height + 1
 			}
-
 			if swap > 0 {
 				temp := imgs[swap]
 				imgs[swap] = imgs[swap - 1]
@@ -241,38 +257,59 @@ main :: proc() {
 			}
 		}
 
-		{
-			dial_pos := draw_ui_box(guil, guil.size/2, {49, 49})
-			dial_middle := dial_pos + {24, 24}
-			r := mouse.pos - dial_middle
-			sproing: int
+		if .dial_begin < mouse.was_on && mouse.was_on < .dial_end {
+			circle_size :: [2]i32{49, 49}
+			dial_box_size :: [2]i32{circle_size.x + 15, circle_size.y + TEXT_BOX_HEIGHT + 5}
+			mouse.is_on = .dial_dial
+			dial.pos = draw_ui_box(guil, dial.pos, dial_box_size)
+
+			ok_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(2) - 2, 2}, "ok", true)
+			no_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(2) - 2, (TEXT_BOX_HEIGHT + 1) + 2}, "no", true)
+			comma_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(1) - 2, 2*(TEXT_BOX_HEIGHT + 1) + 2}, ",", true)
+			point_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(1) - 2, 3*(TEXT_BOX_HEIGHT + 1) + 2}, ".", true)
+			backspace := draw_text_box_button(guil, mouse, dial.pos + dial_box_size - {text_box_width(1) + 2, 2*(TEXT_BOX_HEIGHT + 1) + 1}, "<", true)
+			mouse.is_on = .dial_button if ok_button != .none || no_button != .none || comma_button != .none || point_button != .none || backspace != .none else mouse.is_on
+
+			draw_box(guil, dial.pos + {2, dial_box_size.y - TEXT_BOX_HEIGHT - 2}, {dial_box_size.x - 4, TEXT_BOX_HEIGHT}, body_color = WHITE)
+			draw_text(guil, dial.pos + {dial_box_size.x - text_box_width(dial.input_len), dial_box_size.y - TEXT_BOX_HEIGHT - 1}, cast(string) dial.input_field[:dial.input_len])
+
+			circle_middle := dial.pos + circle_size/2
+			r := mouse.pos - circle_middle
+			selected := -1
 			for i in 0..<10 {
 				on_circle := [2]i32{
 					i32(20*math.sin(math.TAU*f64(i)/10)),
 					i32(20*math.cos(math.TAU*f64(i)/10))
 				}
 				theta := math.mod(1.8 - (math.PI + math.atan2(f64(r.y), f64(r.x)))/math.TAU, 1)
-				fmt.println(theta, f64(i)/10)
-
 				char_clr := UI_TEXT_COLOR
-				if f64(i)/10 < theta && f64(i + 1)/10 >= theta {
-					char_clr = RED
-					sproing = i
+				if mouse.is_on == .dial_dial && f64(i)/10 < theta && f64(i + 1)/10 >= theta {
+					char_clr = UI_PRESSED_COLOR if mouse.left else UI_ACTIVATED_COLOR
+					if !mouse.left && mouse.left_was do selected = i
 				}
-				draw_char(guil, dial_middle + on_circle - {1, 3}, rune('0' + i), char_clr)
-//				draw_line(guil, dial_middle, on_circle.yx, PASTEL_BLUE)
+				draw_char(guil, circle_middle + on_circle - {1, 3}, rune('0' + i), char_clr)
 			}
 			line_len :: 16
 			if magsq(r) < line_len*line_len do r = line_len*r
 			if r == 0 do r = {0, 1}
-			sv := [2]i32{
-				i32(line_len*math.sin(math.TAU*f64(sproing)/10)),
-				i32(line_len*math.cos(math.TAU*f64(sproing)/10))
-			}
-			draw_line(guil, dial_middle, sv, UI_TEXT_COLOR)
-			draw_line(guil, dial_middle, line_len*r/mag(r), UI_TEXT_COLOR)
-		}
+			draw_line(guil, circle_middle, line_len*r/mag(r), UI_TEXT_COLOR)
 
+			char: byte = 0
+			if comma_button == .press do char = ','
+			if point_button == .press do char = '.'
+			if selected >= 0 do char = byte('0' + selected)
+			if char != 0 && dial.input_len < min(14, len(dial.input_field)) {
+				dial.input_field[dial.input_len] = char
+				dial.input_len += 1
+			}
+			if backspace == .press {
+				dial.input_len = max(0, dial.input_len - 1)
+			}
+
+			if no_button == .press {
+				mouse.is_on = .dial_end
+			}
+		}
 
 
 
@@ -281,21 +318,21 @@ main :: proc() {
 		draw_images(imgl, imgs)
 
 
-		/* render to screen with openGL */
-		gl.ClearColor(0.5, 0.5, 0.5, 1.0)
-		gl.Clear(gl.COLOR_BUFFER_BIT)
+		{/* render to screen with openGL */
+			gl.ClearColor(0.5, 0.5, 0.5, 1.0)
+			gl.Clear(gl.COLOR_BUFFER_BIT)
 
-		gl.ActiveTexture(gl.TEXTURE0)
-		gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(guil.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &guil.tex[0])
-		gl.ActiveTexture(gl.TEXTURE1)
-		gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
+			gl.ActiveTexture(gl.TEXTURE0)
+			gl.BindTexture(gl.TEXTURE_2D, gui_tex_o)
+			gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(guil.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &guil.tex[0])
+			gl.ActiveTexture(gl.TEXTURE1)
+			gl.BindTexture(gl.TEXTURE_2D, img_tex_o)
+			gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, expand_values(imgl.size), 0, gl.RGBA, gl.UNSIGNED_BYTE, &imgl.tex[0])
 
-		gl.UseProgram(shader_program)
-		gl.BindVertexArray(vertex_array_o)
-		gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
-
+			gl.UseProgram(shader_program)
+			gl.BindVertexArray(vertex_array_o)
+			gl.DrawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, nil)
+		}
 		t += 1
 	glfw.SwapBuffers(window_handle) }
 }

@@ -8,28 +8,60 @@ Program_layer :: struct {
 	data: [dynamic][4]byte
 }
 
+ON_STATE :: enum{
+	nothing,
+	image_bin_up_down_button,
+	dial_begin,
+		dial_dial,
+		dial_button,
+	dial_end
+}
 Mouse :: struct {
 	pos: [2]i32,
 	left, right: bool,
 	left_was, right_was: bool,
 
-	is_on: enum{nothing, image_bin_up_down_button},
+	is_on: ON_STATE,
+	was_on: ON_STATE,
 	fpos: [2]f64
+}
+
+Dial_box :: struct {
+	title: string,
+	pos: [2]i32,
+	input_len: int,
+	input_field: [64]byte,
+	input_cursor: int
 }
 
 UI_BORDER_COLOR :: [4]byte{100, 70, 100, 255}
 UI_BODY_COLOR :: [4]byte{180, 150, 180, 255}
 UI_TEXT_COLOR :: [4]byte{0, 0, 30, 255}
+UI_ACTIVATED_COLOR :: [4]byte{230, 50, 50, 255}
+UI_PRESSED_COLOR :: [4]byte{70, 60, 220, 255}
 
-/*
-UI_BORDER_COLOR :: [4]byte{255, 1, 120, 255}
-UI_BODY_COLOR :: [4]byte{254, 0, 234, 255}
-UI_TEXT_COLOR :: [4]byte{144, 1, 245, 255}
+draw_text_box_button :: proc(ui: Program_layer, mouse: Mouse, but_pos: [2]i32, text: string, check_press: bool,
+							 dyn := true, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR, text_color := UI_TEXT_COLOR,
+							 activated_color := UI_ACTIVATED_COLOR, pressed_color := UI_PRESSED_COLOR) -> (state: enum{none, on, press}) {
+	but_pos, border_color := but_pos, border_color
+	button_size := [2]i32{text_box_width(len(text)), TEXT_BOX_HEIGHT}
+	if check_press && is_in_rect(mouse.pos, but_pos, button_size) {
+		border_color = pressed_color if mouse.left else activated_color
+		state = .press if !mouse.left && mouse.left_was else .on
+	}
+	draw_text_in_box(ui, but_pos, text, dyn, border_color, body_color, text_color)
+	return state
+}
 
-UI_BORDER_COLOR :: [4]byte{195, 1, 70, 255}
-UI_BODY_COLOR :: [4]byte{194, 0, 184, 255}
-UI_TEXT_COLOR :: [4]byte{104, 1, 205, 255}
-*/
+draw_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR) {
+	for y in box_pos.y..<box_pos.y + box_size.y {
+	for x in box_pos.x..<box_pos.x + box_size.x {
+		color := body_color
+		if y == box_pos.y || y == box_pos.y + box_size.y - 1 do color = border_color
+		if x == box_pos.x || x == box_pos.x + box_size.x - 1 do color = border_color
+		if is_in_space({x, y}, ui.size) do ui.tex[x + y*ui.size.x] = color
+	}}
+}
 
 draw_line :: proc(l: Program_layer, begin: [2]i32, r: [2]i32, color: [4]byte){
 //	r := end - begin
@@ -69,10 +101,20 @@ draw_pixel :: proc(ui: Program_layer, pix_pos: [2]i32, clr: [4]byte) {
 	ui.tex[pix_pos.x + pix_pos.y*ui.size.x] = clr
 }
 
-draw_text_in_box :: proc(ui: Program_layer, box_pos: [2]i32, txt: string, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR, text_color := UI_TEXT_COLOR){
-	box_size := [2]i32{i32(len(txt))*4 + 4, 9}
-	txt_pos := draw_ui_box(ui, box_pos, box_size, border_color, body_color)
+TEXT_BOX_HEIGHT :: 9
+draw_text_in_box :: proc(ui: Program_layer, box_pos: [2]i32, txt: string, dyn := true, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR, text_color := UI_TEXT_COLOR) -> (size: [2]i32) {
+	box_size := [2]i32{i32(len(txt))*4 + 4, TEXT_BOX_HEIGHT}
+	txt_pos: [2]i32
+	if dyn do txt_pos = draw_ui_box(ui, box_pos, box_size, border_color, body_color)
+	else {
+		txt_pos = box_pos
+		draw_box(ui, box_pos, box_size, border_color, body_color)
+	}
 	draw_text(ui, txt_pos + {3, 1}, txt, text_color)
+	return box_size
+}
+text_box_width :: #force_inline proc(len: int) -> i32 {
+	return i32(len*4 + 4)
 }
 
 draw_text :: proc(ui: Program_layer, txt_pos: [2]i32, txt: string, color := UI_TEXT_COLOR){
@@ -103,7 +145,7 @@ draw_char :: proc(ui: Program_layer, chr_pos: [2]i32, char: rune, color := UI_TE
 
 // FIXME: goes out of bounds when box is too big and texture is too small?
 // It has to do with the window becoming too small and the mouse coordinates getting real confused
-draw_ui_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR) -> [2]i32 {
+draw_ui_box :: proc(ui: Program_layer, box_pos: [2]i32, box_size: [2]i32, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR) -> (actual_pos: [2]i32) {
 	box_pos, box_size := box_pos, box_size
 	assert(box_size.x > 0 && box_size.y > 0)
 	right_edge_color, top_edge_color := border_color, border_color
