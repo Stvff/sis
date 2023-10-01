@@ -14,7 +14,8 @@ ON_STATE :: enum{
 	dial_begin,
 		dial_dial,
 		dial_button,
-	dial_end
+	dial_end,
+	save_button,
 }
 Mouse :: struct {
 	pos: [2]i32,
@@ -23,15 +24,17 @@ Mouse :: struct {
 
 	is_on: ON_STATE,
 	was_on: ON_STATE,
-	fpos: [2]f64
+	fpos: [2]f64,
 }
 
 Dial_box :: struct {
 	title: string,
 	pos: [2]i32,
-	input_len: int,
-	input_field: [64]byte,
-	input_cursor: int
+	target: int,
+	is_on: enum{one, two},
+	input_len: [2]int,
+	input_cursor: [2]int,
+	input_field: [2][64]byte,
 }
 
 UI_BORDER_COLOR :: [4]byte{100, 70, 100, 255}
@@ -39,6 +42,19 @@ UI_BODY_COLOR :: [4]byte{180, 150, 180, 255}
 UI_TEXT_COLOR :: [4]byte{0, 0, 30, 255}
 UI_ACTIVATED_COLOR :: [4]byte{230, 50, 50, 255}
 UI_PRESSED_COLOR :: [4]byte{70, 60, 220, 255}
+
+draw_box_button :: proc(ui: Program_layer, mouse: Mouse, but_pos: [2]i32, but_size: [2]i32, check_press: bool,
+							 dyn := true, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR,
+							 activated_color := UI_ACTIVATED_COLOR, pressed_color := UI_PRESSED_COLOR) -> (state: enum{none, on, press}) {
+	but_pos, border_color := but_pos, border_color
+	if check_press && is_in_rect(mouse.pos, but_pos, but_size) {
+		border_color = pressed_color if mouse.left else activated_color
+		state = .press if !mouse.left && mouse.left_was else .on
+	}
+	if dyn do draw_box(ui, but_pos, but_size, border_color, body_color)
+	else do draw_ui_box(ui, but_pos, but_size, border_color, body_color)
+	return state
+}
 
 draw_text_box_button :: proc(ui: Program_layer, mouse: Mouse, but_pos: [2]i32, text: string, check_press: bool,
 							 dyn := true, border_color := UI_BORDER_COLOR, body_color := UI_BODY_COLOR, text_color := UI_TEXT_COLOR,

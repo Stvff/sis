@@ -5,6 +5,8 @@ import "vendor:glfw"
 import gl "vendor:OpenGL"
 import "core:math"
 import "core:slice"
+import "core:strconv"
+import "core:os"
 
 INIT_WIDTH   :: 1280
 INIT_HEIGHT  :: 800
@@ -144,23 +146,22 @@ main :: proc() {
 		gl.Uniform1i(gl.GetUniformLocation(shader_program, "img_texture"), 1)
 	}
 
-	imgs := make([]Image, 3)
+	imgs := make([dynamic]Image, 0)
+	for i := 1; i < len(os.args); i += 1 {
+		img, ok := load_qoi(os.args[i])
+		if !ok do continue
+		append(&imgs, img)
+	}
 	defer {
 		for img in imgs do delete(img.data)
 		delete(imgs)
-	}
-	{
-		imgs[0] = load_qoi("s/frame00100.qoi")
-		imgs[1] = load_qoi("s/frame00100_sprite.qoi")
-		imgs[1].pos = {40, 40}
-		imgs[2] = load_qoi("s/frame00100_sprite.qoi")
-		imgs[2].pos = {-60, -50}
 	}
 
 	mouse: Mouse
 	dial: Dial_box
 
-	t: u128 = 0
+	t, save_msg: u128 = 0, 0
+	show_msg := false
 	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
 		if glfw.GetKey(window_handle, glfw.KEY_ESCAPE) == glfw.PRESS do break
 		{ /* if window size changes */
@@ -212,6 +213,26 @@ main :: proc() {
 
 		if .dial_begin < mouse.was_on && mouse.was_on < .dial_end do mouse.is_on = mouse.was_on
 
+		{/* The save button */
+			dosave := draw_text_box_button(guil, mouse, {guil.size.x - 10 - text_box_width(4), guil.size.y - TEXT_BOX_HEIGHT - 10}, "Save", mouse.is_on == .nothing)
+			if dosave == .press {
+				render: Program_layer
+				render.size = imgs[0].size
+				render.data = make([dynamic][4]byte, area(render.size))
+				defer delete(render.data)
+				render.tex = render.data[:]
+				draw_images(render, imgs[:], false, imgs[0].pos, false)
+				diskify := Image{
+					name = "sis_result.qoi",
+					size = render.size,
+					data = render.data
+				}
+				write_qoi(diskify)
+				save_msg = t
+				show_msg = true
+			}
+		}
+
 		{/* draw_images_bins and manage layers */
 			bin_height :: TEXT_BOX_HEIGHT*2 + 4
 			arrow_clr := UI_BORDER_COLOR
@@ -243,7 +264,20 @@ main :: proc() {
 				{/* image position button */
 					if draw_text_box_button(guil, mouse, actual_pos + {SMALL_ARROW_SIZE.x + 4, 2}, "position", mouse.is_on == .nothing) == .press {
 						mouse.is_on = .dial_dial
-						dial = {title = "position", pos = mouse.pos, input_field = 0, input_cursor = 0}
+						dial = {title = "position", pos = mouse.pos, target = i, is_on = .one, input_field = {' ', ' '}, input_len = 1}
+						tpos := imgs[dial.target].pos
+						o_x := 0 if tpos.x < 0 else 1
+						o_y := 0 if tpos.y < 0 else 1
+
+						inp := dial.input_field[0][o_x:13]
+						copy(inp, transmute([]byte) strconv.itoa(inp, int(tpos.x)) )
+						dial.input_len[0] = o_x
+						for c in inp do if c != ' ' do dial.input_len[0] += 1; else do break
+
+						inp = dial.input_field[1][o_y:13]
+						dial.input_len[1] = o_y
+						copy(inp, transmute([]byte) strconv.itoa(inp, int(tpos.y)) )
+						for c in inp do if c != ' ' do dial.input_len[1] += 1; else do break
 					}
 				}
 				y -= bin_height + 1
@@ -259,19 +293,25 @@ main :: proc() {
 
 		if .dial_begin < mouse.was_on && mouse.was_on < .dial_end {
 			circle_size :: [2]i32{49, 49}
-			dial_box_size :: [2]i32{circle_size.x + 15, circle_size.y + TEXT_BOX_HEIGHT + 5}
+			dial_box_size :: [2]i32{circle_size.x + 15, circle_size.y + 2*TEXT_BOX_HEIGHT + 5}
 			mouse.is_on = .dial_dial
 			dial.pos = draw_ui_box(guil, dial.pos, dial_box_size)
 
 			ok_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(2) - 2, 2}, "ok", true)
 			no_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(2) - 2, (TEXT_BOX_HEIGHT + 1) + 2}, "no", true)
-			comma_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(1) - 2, 2*(TEXT_BOX_HEIGHT + 1) + 2}, ",", true)
-			point_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(1) - 2, 3*(TEXT_BOX_HEIGHT + 1) + 2}, ".", true)
-			backspace := draw_text_box_button(guil, mouse, dial.pos + dial_box_size - {text_box_width(1) + 2, 2*(TEXT_BOX_HEIGHT + 1) + 1}, "<", true)
-			mouse.is_on = .dial_button if ok_button != .none || no_button != .none || comma_button != .none || point_button != .none || backspace != .none else mouse.is_on
+			sign_button := draw_text_box_button(guil, mouse, dial.pos + {dial_box_size.x - text_box_width(2) - 2, 2*(TEXT_BOX_HEIGHT + 1) + 2}, "-+", true)
+			backspace := draw_text_box_button(guil, mouse, dial.pos + dial_box_size - {text_box_width(1) + 2, 3*(TEXT_BOX_HEIGHT + 1) + 1}, "<", true)
+			mouse.is_on = .dial_button if ok_button != .none || no_button != .none || sign_button != .none || backspace != .none else mouse.is_on
 
-			draw_box(guil, dial.pos + {2, dial_box_size.y - TEXT_BOX_HEIGHT - 2}, {dial_box_size.x - 4, TEXT_BOX_HEIGHT}, body_color = WHITE)
-			draw_text(guil, dial.pos + {dial_box_size.x - text_box_width(dial.input_len), dial_box_size.y - TEXT_BOX_HEIGHT - 1}, cast(string) dial.input_field[:dial.input_len])
+			draw_text(guil, dial.pos + {2, dial_box_size.y - TEXT_BOX_HEIGHT - 1}, "X")
+			draw_text(guil, dial.pos + {2, dial_box_size.y - 2*TEXT_BOX_HEIGHT - 1}, "Y")
+			x_button := draw_box_button(guil, mouse, dial.pos + {6, dial_box_size.y - TEXT_BOX_HEIGHT - 2}, {dial_box_size.x - 9, TEXT_BOX_HEIGHT}, true, body_color = WHITE)
+			y_button := draw_box_button(guil, mouse, dial.pos + {6, dial_box_size.y - 2*TEXT_BOX_HEIGHT - 2}, {dial_box_size.x - 9, TEXT_BOX_HEIGHT}, true, body_color = WHITE)
+			draw_text(guil, dial.pos + {dial_box_size.x - text_box_width(dial.input_len[0]), dial_box_size.y - TEXT_BOX_HEIGHT - 1}, cast(string) dial.input_field[0][:dial.input_len[0]])
+			draw_text(guil, dial.pos + {dial_box_size.x - text_box_width(dial.input_len[1]), dial_box_size.y - 2*TEXT_BOX_HEIGHT - 1}, cast(string) dial.input_field[1][:dial.input_len[1]])
+			mouse.is_on = .dial_button if x_button != .none || y_button != .none else mouse.is_on
+			if x_button == .press do dial.is_on = .one
+			if y_button == .press do dial.is_on = .two
 
 			circle_middle := dial.pos + circle_size/2
 			r := mouse.pos - circle_middle
@@ -295,28 +335,41 @@ main :: proc() {
 			draw_line(guil, circle_middle, line_len*r/mag(r), UI_TEXT_COLOR)
 
 			char: byte = 0
-			if comma_button == .press do char = ','
-			if point_button == .press do char = '.'
+			if sign_button == .press {
+				if dial.input_field[dial.is_on][0] == '-' do dial.input_field[dial.is_on][0] = ' '
+				else do dial.input_field[dial.is_on][0] = '-'
+			}
 			if selected >= 0 do char = byte('0' + selected)
-			if char != 0 && dial.input_len < min(14, len(dial.input_field)) {
-				dial.input_field[dial.input_len] = char
-				dial.input_len += 1
+			if char != 0 && dial.input_len[dial.is_on] < min(13, len(dial.input_field[dial.is_on])) {
+				dial.input_field[dial.is_on][dial.input_len[dial.is_on]] = char
+				dial.input_len[dial.is_on] += 1
 			}
 			if backspace == .press {
-				dial.input_len = max(0, dial.input_len - 1)
+				dial.input_len[dial.is_on] = max(0, dial.input_len[dial.is_on] - 1)
 			}
 
+			if ok_button == .press {
+				str_x_input := string(dial.input_field[0][:dial.input_len[0]])
+				if str_x_input[0] == ' ' do str_x_input = str_x_input[1:]
+				str_y_input := string(dial.input_field[1][:dial.input_len[1]])
+				if str_y_input[0] == ' ' do str_y_input = str_y_input[1:]
+				imgs[dial.target].pos.x = cast(i32) strconv.atoi(str_x_input)
+				imgs[dial.target].pos.y = cast(i32) strconv.atoi(str_y_input)
+				draw_preddy_gradient(imgl)
+			}
 			if no_button == .press {
 				mouse.is_on = .dial_end
 			}
 		}
 
+		if t - save_msg < 600 && show_msg {
+			draw_text_in_box(guil, {guil.size.x - 10 - text_box_width(len("saved as \"sis_result.qoi\".")), guil.size.y - 2*TEXT_BOX_HEIGHT - 11}, "saved as \"sis_result.qoi\".")
+		} else do show_msg = false
 
 
 
 
-		draw_images(imgl, imgs)
-
+		draw_images(imgl, imgs[:])
 
 		{/* render to screen with openGL */
 			gl.ClearColor(0.5, 0.5, 0.5, 1.0)

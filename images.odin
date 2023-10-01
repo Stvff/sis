@@ -11,7 +11,7 @@ Image :: struct {
 	scale: f64
 }
 
-draw_images :: proc(l: Program_layer, imgs: []Image, do_center := true, origin: [2]i32 = {0, 0}){
+draw_images :: proc(l: Program_layer, imgs: []Image, do_center := true, origin: [2]i32 = {0, 0}, flip := true){
 	origin := origin
 	if len(imgs) == 0 do return
 	if do_center do origin = l.size/2 - imgs[0].size/2
@@ -22,7 +22,9 @@ draw_images :: proc(l: Program_layer, imgs: []Image, do_center := true, origin: 
 	for x in i32(0)..<img.size.x-1 {
 		p := origin + img.pos + {x, y}
 		if !is_in_space(p, l.size) do continue
-		ipix := img.data[x + (img.size.y - y - 1)*img.size.x]
+		ipix: [4]byte
+		if flip do ipix = img.data[x + (img.size.y - y - 1)*img.size.x]
+		else do ipix = img.data[x + y*img.size.x]
 		tpix := l.tex[p.x + p.y*l.size.x]
 		a := f64(ipix.a)/255
 		mix := [4]byte{
@@ -48,17 +50,44 @@ draw_preddy_gradient :: proc(layer: Program_layer){
 import "core:slice"
 import "core:image/qoi"
 import "core:bytes"
-load_qoi :: proc(name: string) -> (my_img: Image) {
+load_qoi :: proc(name: string) -> (my_img: Image, ero: bool) {
 	qimg, err := qoi.load(name) // TODO: check if file exists/is proper
-	if err != nil do panic("load_qoi: loading error")
+	if err != nil {
+		fmt.eprintln("load_qoi: file not found")
+		return my_img, false
+	}
 	defer qoi.destroy(qimg)
-	if qimg.channels != 4 do panic("load_qoi: wrong amount of channels")
-	if qimg.depth != 8 do panic("load_qoi: wrong depth")
+	if qimg.channels != 4 {
+		fmt.eprintln("load_qoi: wrong amount of channels")
+		return my_img, false
+	}
+	if qimg.depth != 8 {
+		fmt.eprintln("load_qoi: wrong depth")
+		return my_img, false
+	}
 	my_img.name = name
 	my_img.size.x = i32(qimg.width)
 	my_img.size.y = i32(qimg.height)
 	my_img.data = make([dynamic][4]byte, area(my_img.size))
 	buf := slice.reinterpret([]byte, my_img.data[:])
 	copy(buf, bytes.buffer_to_bytes(&qimg.pixels))
-	return my_img
+	return my_img, true
+}
+
+import "core:image"
+write_qoi :: proc(img: Image) {
+	buu := make([dynamic]byte, area(img.size)*4)
+	defer delete(buu)
+	aaa := slice.reinterpret([]byte, img.data[:])
+	copy(buu[:], aaa)
+	forqoi := image.Image{
+		width = int(img.size.x),
+		height = int(img.size.y),
+		channels = 4,
+		depth = 8,
+		pixels = bytes.Buffer {
+			buf = buu
+		}
+	}
+	qoi.save(img.name, &forqoi)
 }
