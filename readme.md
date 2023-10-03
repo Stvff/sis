@@ -33,6 +33,8 @@ This position is with respect to the topleft of the image on the first layer.\
 Clicking the "Save" button in the top left will create an image the size of the first layer, at the offset of the first layer.
 In other words, it uses the first layer as a sort of 'window', and draws all the images inside it in order. It writes the result to `sis_result.qoi`
 
+![SIS doing the thing it can, splicing images](/sis_demo.gif "SIS doing the thing it can, splicing images")
+
 Currently, this is everything SIS does. It is still very limited (and unfinished) in many ways, but it is in the correct direction of where I want it to go.
 
 ## Goals
