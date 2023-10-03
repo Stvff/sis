@@ -162,6 +162,7 @@ main :: proc() {
 
 	t, save_msg: u128 = 0, 0
 	show_msg := false
+	redraw_images := true
 	for !glfw.WindowShouldClose(window_handle) { glfw.PollEvents()
 		if glfw.GetKey(window_handle, glfw.KEY_ESCAPE) == glfw.PRESS do break
 		{ /* if window size changes */
@@ -187,7 +188,7 @@ main :: proc() {
 
 				slice.fill(guil.tex, 0)
 //				slice.fill(imgl.tex, 0)
-				draw_preddy_gradient(imgl)
+				redraw_images = true
 //				fmt.println("---------------------- new frame -----------------")
 			}
 		}
@@ -221,7 +222,7 @@ main :: proc() {
 				render.data = make([dynamic][4]byte, area(render.size))
 				defer delete(render.data)
 				render.tex = render.data[:]
-				draw_images(render, imgs[:], false, imgs[0].pos, false)
+				draw_images(render, imgs[:], false)
 				diskify := Image{
 					name = "sis_result.qoi",
 					size = render.size,
@@ -286,7 +287,7 @@ main :: proc() {
 				temp := imgs[swap]
 				imgs[swap] = imgs[swap - 1]
 				imgs[swap - 1] = temp
-				draw_preddy_gradient(imgl)
+				redraw_images = true
 				mouse.is_on = .image_bin_up_down_button
 			}
 		}
@@ -355,7 +356,7 @@ main :: proc() {
 				if str_y_input[0] == ' ' do str_y_input = str_y_input[1:]
 				imgs[dial.target].pos.x = cast(i32) strconv.atoi(str_x_input)
 				imgs[dial.target].pos.y = cast(i32) strconv.atoi(str_y_input)
-				draw_preddy_gradient(imgl)
+				redraw_images = true
 			}
 			if no_button == .press {
 				mouse.is_on = .dial_end
@@ -369,7 +370,11 @@ main :: proc() {
 
 
 
-		draw_images(imgl, imgs[:])
+//		draw_images(imgl, imgs[:], false, imgs[0].pos)
+		if redraw_images {
+			draw_images(imgl, imgs[:], true)
+			redraw_images = false
+		}
 
 		{/* render to screen with openGL */
 			gl.ClearColor(0.5, 0.5, 0.5, 1.0)

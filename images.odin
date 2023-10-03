@@ -11,30 +11,33 @@ Image :: struct {
 	scale: f64
 }
 
-draw_images :: proc(l: Program_layer, imgs: []Image, do_center := true, origin: [2]i32 = {0, 0}, flip := true){
-	origin := origin
-	if len(imgs) == 0 do return
-	if do_center do origin = l.size/2 - imgs[0].size/2
+draw_images :: proc(l: Program_layer, imgs: []Image, on_screen: bool) {
+	if len(imgs) == 0 {
+		draw_preddy_gradient(l)
+		return
+	}
+	origin := imgs[0].pos
+	if on_screen do origin += l.size/2 - imgs[0].size/2
 
-	for img in imgs {
-	if len(img.data) == 0 do continue
-	for y in i32(0)..<img.size.y-1 {
-	for x in i32(0)..<img.size.x-1 {
-		p := origin + img.pos + {x, y}
-		if !is_in_space(p, l.size) do continue
-		ipix: [4]byte
-		if flip do ipix = img.data[x + (img.size.y - y - 1)*img.size.x]
-		else do ipix = img.data[x + y*img.size.x]
-		tpix := l.tex[p.x + p.y*l.size.x]
+	for y in 0..<l.size.y {
+	for x in 0..<l.size.x {
+	tpix := [4]byte{255 - byte((210*x)/l.size.x), 0, 255 - byte((210*(l.size.y - 1 - y))/l.size.y), 255} if on_screen else 0
+	for img, n in imgs {
+		o := origin if n != 0 else origin - imgs[0].pos
+		p := [2]i32{x, y} - o - img.pos
+		if !is_in_space(p, img.size) do continue
+		ipix := img.data[p.x + p.y*img.size.x]
 		a := f64(ipix.a)/255
-		mix := [4]byte{
+		tpix = [4]byte{
 			byte(a*f64(ipix.r) + (1-a)*f64(tpix.r)),
 			byte(a*f64(ipix.g) + (1-a)*f64(tpix.g)),
 			byte(a*f64(ipix.b) + (1-a)*f64(tpix.b)),
 			255
 		}
-		l.tex[p.x + p.y*l.size.x] = mix
-	}}}
+	}
+	if on_screen do l.tex[x + (l.size.y-1 - y)*l.size.x] = tpix
+	else do l.tex[x + y*l.size.x] = tpix
+	}}
 }
 
 draw_preddy_gradient :: proc(layer: Program_layer){

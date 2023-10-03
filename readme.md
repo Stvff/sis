@@ -29,7 +29,7 @@ $ sis image1.qoi image2.qoi image3.qoi #any amount of images
 ```
 This opens those images, and puts the first image and the bottom, the second image above that, etc.\
 On the left, you'll see the layer bins. You can move layers by clicking the arrows on the bins. Clicking on the "position" button opens a position input window.
-This position is with respect to the bottomleft of the image on the first layer.\
+This position is with respect to the topleft of the image on the first layer.\
 Clicking the "Save" button in the top left will create an image the size of the first layer, at the offset of the first layer.
 In other words, it uses the first layer as a sort of 'window', and draws all the images inside it in order. It writes the result to `sis_result.qoi`
 
